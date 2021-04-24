@@ -3,9 +3,10 @@ non-official Narwallets' near-api js/ts lite version
 
 near-api-lite is a a subset of the official [near-api-js](https://www.npmjs.com/package/near-api-js)
 
+It has no dependencies and unpacked size is 240kb (approx. 10% of near-api-js)
 ### Differences:
 
-* Smaller, just core functionality
+* Smaller, just core functionality, no dependencies
 
 ### What's included
 
@@ -15,6 +16,12 @@ near-api-lite is a a subset of the official [near-api-js](https://www.npmjs.com/
 * bn.js
 * json-rpc (minimal)
 * near-rpc (minimal)
+
+### What's extra
+
+* base-smart-contract class to derive from
+* NEP141 smart contract class to derive from
+* NEP129 smart contract class to derive from
 
 ### What's not included
 
@@ -28,7 +35,7 @@ near-api-lite is a a subset of the official [near-api-js](https://www.npmjs.com/
 
 ## Objective
 
-This is a simpler API intended to analyze the minimal required API to interact with the NEAR blockchain
+This is a simpler API intended to include the minimal required API to interact with the NEAR blockchain
 
 ## Prerequisites:
 
@@ -36,9 +43,9 @@ This is a simpler API intended to analyze the minimal required API to interact w
 
 ## Setup:
 
-1) Install dependencies by running:
+1) Add to your project by running:
 ```bash
-npm i
+npm i near-api-lite
 ```
 
 Happy coding! 🚀 

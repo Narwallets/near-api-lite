@@ -1,0 +1,26 @@
+{
+    "extends": "@tsconfig/node14/tsconfig.json",
+    "compilerOptions": {
+      "rootDir":"./src",
+      "outDir": "./lib",
+      "target": "es2020",
+      "module": "es2020",
+      "moduleResolution": "node",
+      "declaration": true,
+      "isolatedModules": true,
+      "strict": true,
+      "noFallthroughCasesInSwitch": true,
+      "noImplicitReturns": true,
+      "noPropertyAccessFromIndexSignature": true,
+      "noUncheckedIndexedAccess": true,
+      "noUnusedLocals": true,
+      "noUnusedParameters": true,
+      "resolveJsonModule": true,
+      "experimentalDecorators": true
+    },
+    "typedocOptions": {
+      "entryPoints": ["index.ts"],
+      "includeVersion": false,
+      "hideGenerator": true
+    }
+  }

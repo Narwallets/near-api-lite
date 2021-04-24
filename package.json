@@ -1,0 +1,39 @@
+{
+  "name": "near-api-lite",
+  "version": "0.0.1",
+  "description": "non-official light near-api for ts/js",
+  "type": "module",
+  "module": "lib/index.js",
+  "main": "lib/index.js",
+  "types": "lib/index.d.ts",
+  "scripts": {
+    "build": "npx tsc",
+    "test": "node dist/test"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Narwallets/near-api-lite.git"
+  },
+  "keywords": [
+    "near",
+    "api",
+    "typescript",
+    "lite",
+    "light",
+    "web3"
+  ],
+  "author": "Lucio Tato <luciotato@gmail.com> (https://github.com/luciotato)",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/Narwallets/near-api-lite/issues"
+  },
+  "homepage": "https://github.com/Narwallets/near-api-lite#readme",
+  "devDependencies": {
+    "@tsconfig/node14": "^1.0.0",
+    "@types/bn.js": "^5.1.0",
+    "@types/bs58": "^4.0.1",
+    "bs58": "^4.0.1",
+    "typedoc": "^0.20.35",
+    "typescript": "^4"
+  }
+}
