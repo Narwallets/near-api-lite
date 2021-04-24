@@ -1,9 +1,7 @@
-if (!globalThis.fetch) {
-    const fetch = require('node-fetch');
-    globalThis.fetch = fetch;
-}
+import fetch from 'node-fetch'
 
 import * as naclUtil from "../tweetnacl/util.js";
+import { ytonFull } from "./conversion.js";
 
 let rpcUrl: string = "https://rpc.mainnet.near.org/"
 
@@ -19,17 +17,6 @@ export function getHeaders() {
     return fetchHeaders;
 }
 
-
-export function ytonFull(str: string): string {
-    let pre="";
-    if (str.startsWith("-")) {
-        pre="-"
-        str= str.slice(1);
-    }
-    let result = (str + "").padStart(25, "0")
-    result = result.slice(0, -24) + "." + result.slice(-24)
-    return pre + result;
-}
 
 export function formatJSONErr(obj: any): any {
 

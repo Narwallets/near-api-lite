@@ -1,9 +1,14 @@
 # near-api-lite
-non-official Narwallets' near-api js/ts lite version
+non-official Narwallets' near-api js/ts lite version - **for node.js**
 
 near-api-lite is a a subset of the official [near-api-js](https://www.npmjs.com/package/near-api-js)
 
 It has no dependencies and unpacked size is 240kb (approx. 10% of near-api-js)
+
+## TODO
+
+* create near-api-lite-browser
+
 ### Differences:
 
 * Smaller, just core functionality, no dependencies

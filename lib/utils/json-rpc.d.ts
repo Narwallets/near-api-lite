@@ -1,7 +1,6 @@
 export declare function setRpcUrl(newUrl: string): void;
 export declare function addHeader(name: string, value: string): void;
 export declare function getHeaders(): Record<string, string>;
-export declare function ytonFull(str: string): string;
 export declare function formatJSONErr(obj: any): any;
 export declare function jsonRpcInternal(payload: Record<string, any>): Promise<any>;
 /**

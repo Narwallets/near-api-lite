@@ -224,7 +224,7 @@ function serializeField(schema: Schema, fieldName: string, value: any, fieldType
             }
         } else {
             if (!value){
-                console.error("fieldname:", fieldName, value, fieldType)
+                console.error("fieldName:", fieldName, value, fieldType)
                 throw new Error("serialize struct null/undefined value")
             }
             serializeStruct(schema, value, writer);
