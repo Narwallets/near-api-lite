@@ -12,7 +12,7 @@ near-api-lite is a a subset of the official [near-api-js](https://www.npmjs.com/
 * Transaction
 * Borsh Serializer
 * a .ts cut-down version fo TweetNacl (only sign/25519 curve)
-* Big Number - BN.js
+* bn.js
 * json-rpc (minimal)
 * near-rpc (minimal)
 
