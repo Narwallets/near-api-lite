@@ -2,7 +2,7 @@
   "name": "near-api-lite",
   "version": "0.0.1",
   "description": "non-official light near-api for ts/js",
-  "type": "module",
+  "type": "commonjs",
   "module": "lib/index.js",
   "main": "lib/index.js",
   "types": "lib/index.d.ts",
