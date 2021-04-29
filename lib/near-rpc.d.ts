@@ -1,5 +1,6 @@
 import * as TX from "./transaction.js";
 import BN = require('bn.js');
+export declare function setLogLevel(n: number): void;
 export declare function lastBlockHashSeen(): Uint8Array;
 export declare function lastBlockHeightSeen(): number;
 export declare function bufferToHex(buffer: any): string;
@@ -38,4 +39,5 @@ export declare const BN_ZERO: BN;
 export declare const ONE_TGAS: BN;
 export declare const ONE_NEAR: BN;
 export declare function call(contractId: string, method: string, params: any, sender: string, privateKey: string, TGas: number, attachedYoctos?: string): Promise<any>;
+export declare function delete_key(pubKey: string, accountId: string, privateKey: string): Promise<any>;
 export declare function delete_account(accountToDelete: string, privateKey: string, beneficiary: string): Promise<any>;

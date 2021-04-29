@@ -1,18 +1,25 @@
 import { jsonRpc, jsonRpcQuery, formatJSONErr } from "./utils/json-rpc.js"
 import * as naclUtil from "./tweetnacl/util.js"
 import {isValidAccountID} from "./utils/valid.js";
-import { KeyPairEd25519 } from "./utils/key-pair.js"
+import { KeyPairEd25519, PublicKey } from "./utils/key-pair.js"
 import { serialize, base_decode } from "./utils/serialize.js"
 import * as TX from "./transaction.js"
 
 import * as bs58 from "./utils/bs58.js";
 import * as sha256 from "./utils/sha256.js"
 import BN = require('bn.js');
-import { ntoy } from "./utils/conversion.js";
+import { ntoy, yton } from "./utils/conversion.js";
 
 //---------------------------
 //-- NEAR PROTOCOL RPC CALLS
 //---------------------------
+
+let logLevel =0;
+/// 0=no log, 1=info, 2=all
+export function setLogLevel(n:number) {
+    logLevel=n;
+}
+
 
 //--helper fn
 let last_block_hash: Uint8Array;
@@ -188,29 +195,25 @@ export async function broadcast_tx_commit_actions(actions: TX.Action[], signerId
         throw Error(formatJSONErr(result.status.Failure))
     }
 
-    if (result.status && result.status.SuccessValue=="") { //returned "void"
+    if (logLevel>1) console.log(getLogsAndErrorsFromReceipts(result));
+
+    if (result.status && result.status.SuccessValue==="") { //returned "void"
         return undefined; //void
     }
 
     if (result.status && result.status.SuccessValue) { //some json result value, can by a string|true/false|a number
         const sv = naclUtil.encodeUTF8(naclUtil.decodeBase64(result.status.SuccessValue))
-        //console.log("result.status.SuccessValue:", sv)
+        if (logLevel>0) console.log("result.status.SuccessValue:", sv);
         return JSON.parse(sv)
-        // if (sv == "false") { //bool functions returning false does not mean an error
-        //     console.error(JSON.stringify(result))
-        //     throw Error()
-        // }
     }
 
     console.error(JSON.stringify(result))
     throw Error("!result.status Failure or SuccessValue")    
-    //return result
 }
 
 //-------------------------------
 function getLogsAndErrorsFromReceipts(txResult: any) {
     let result = []
-    result.push("Transaction failed.")
     try {
         for (let ro of txResult.receipts_outcome) {
             //get logs
@@ -243,12 +246,6 @@ export function send(sender: string, receiver: string, amountNear: number, priva
     return broadcast_tx_commit_actions(actions, sender, receiver, privateKey)
 }
 
-//-------------------------------
-// export function stake(stakingPoolId: string, amountNear: number, sender: string, privateKey: string): Promise<any> {
-//     if (isNaN(amountNear) || amountNear <= 0) throw Error("invalid amount")
-//     const actions = [TX.stake(new BN(ntoy(amountNear)), publicKey???which one?)]
-//     return broadcast_tx_commit_actions(actions, sender, stakingPoolId, privateKey)
-// }
 
 //-------------------------------
 //-- CALL CONTRACT METHOD -------
@@ -266,9 +263,19 @@ export function call(
     TGas: number,
     attachedYoctos?: string): Promise<any> {
 
+    if (logLevel>0) console.log(`call ${contractId} ${method} ${JSON.stringify(params)} --accountId ${sender} -gas:${TGas} --amount:${yton(attachedYoctos||"0")}`);
+
     return broadcast_tx_commit_actions(
         [TX.functionCall(method, params, new BN(TGas.toString() + "0".repeat(12)), new BN(attachedYoctos||"0"))],
         sender, contractId, privateKey)
+}
+
+//-------------------------------
+export function delete_key(pubKey: string, accountId:string, privateKey: string): Promise<any> {
+
+    const actions = [TX.deleteKey(PublicKey.fromString(pubKey))]
+    return broadcast_tx_commit_actions(actions, accountId, accountId, privateKey)
+
 }
 
 //-------------------------------
