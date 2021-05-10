@@ -1,6 +1,12 @@
 export declare function setRpcUrl(newUrl: string): void;
 export declare function addHeader(name: string, value: string): void;
 export declare function getHeaders(): Record<string, string>;
+/**
+ * Extracts a user-readable format from a smart-contract error result
+ * converts yoctoNears to NEAR amounts
+ * @param obj result.status.failure or other err objects
+ * @returns
+ */
 export declare function formatJSONErr(obj: any): any;
 export declare function jsonRpcInternal(payload: Record<string, any>): Promise<any>;
 /**

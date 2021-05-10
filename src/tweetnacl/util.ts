@@ -5,45 +5,41 @@
 // Public domain.
 
 //--bto & atob base64 browser & node
-const nodeBtoa = (str:string) => Buffer.from(str).toString('base64'); 
+const nodeBtoa = (str: string) => Buffer.from(str).toString('base64');
 export const universal_btoa = typeof btoa == 'undefined' ? nodeBtoa : btoa;
 const nodeAtob = (u64encoded: string) => Buffer.from(u64encoded, 'base64').toString();
-export const universal_atob = typeof atob == 'undefined' ? nodeAtob: atob; 
+export const universal_atob = typeof atob == 'undefined' ? nodeAtob : atob;
 //--
 
 export function encodeUTF8(arr: Uint8Array): string {
-    var i, s = [];
-    for (i = 0; i < arr.length; i++) s.push(String.fromCharCode(arr[i]));
-    return decodeURIComponent(escape(s.join('')));
-  };
+  var i, s = [];
+  for (i = 0; i < arr.length; i++) s.push(String.fromCharCode(arr[i]));
+  return decodeURIComponent(escape(s.join('')));
+};
 
 export function decodeUTF8(s: string): Uint8Array {
-    if (typeof s !== 'string') throw new TypeError('expected string');
-    var i, d = unescape(encodeURIComponent(s)), b = new Uint8Array(d.length);
-    for (i = 0; i < d.length; i++) b[i] = d.charCodeAt(i);
-    return b;
-  };
+  if (typeof s !== 'string') throw new TypeError('expected string');
+  var i, d = unescape(encodeURIComponent(s)), b = new Uint8Array(d.length);
+  for (i = 0; i < d.length; i++) b[i] = d.charCodeAt(i);
+  return b;
+};
 
 
-export  function validateBase64(s:string) {
-    if (!(/^(?:[A-Za-z0-9+\/]{2}[A-Za-z0-9+\/]{2})*(?:[A-Za-z0-9+\/]{2}==|[A-Za-z0-9+\/]{3}=)?$/.test(s))) {
-      throw new TypeError('invalid encoding');
-    }
+export function validateBase64(s: string) {
+  if (!(/^(?:[A-Za-z0-9+\/]{2}[A-Za-z0-9+\/]{2})*(?:[A-Za-z0-9+\/]{2}==|[A-Za-z0-9+\/]{3}=)?$/.test(s))) {
+    throw new TypeError('invalid encoding');
   }
+}
 
 
 export function encodeBase64(arr: Uint8Array): string {
-      var i, s = [], len = arr.length;
-      for (i = 0; i < len; i++) s.push(String.fromCharCode(arr[i]));
-      return universal_btoa(s.join(''));
-    };
+  return Buffer.from(arr).toString('base64');
+}
 
 export function decodeBase64(s: string): Uint8Array {
-      validateBase64(s);
-      var i, d = universal_atob(s), b = new Uint8Array(d.length);
-      for (i = 0; i < d.length; i++) b[i] = d.charCodeAt(i);
-      return b;
-    };
+  validateBase64(s);
+  return new Uint8Array(Array.prototype.slice.call(Buffer.from(s, 'base64'), 0));
+};
 
 
 /*

@@ -6,14 +6,14 @@ import BN from 'bn.js';
 //const TextDecoder = (typeof (global as any).TextDecoder !== 'function') ? encoding.TextDecoder : (global as any).TextDecoder;
 //const textDecoder = new TextDecoder('utf-8', { fatal: true });
 
-export function base_encode(value: Uint8Array | string): string {
+export function encodeBase58(value: Uint8Array | string): string {
     if (typeof(value) === 'string') {
         value = Buffer.from(value, 'utf8');
     }
     return bs58.encode(Buffer.from(value));
 }
 
-export function base_decode(value: string): Uint8Array {
+export function decodeBase58(value: string): Uint8Array {
     return Buffer.from(bs58.decode(value));
 }
 

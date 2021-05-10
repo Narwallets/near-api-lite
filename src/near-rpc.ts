@@ -1,8 +1,8 @@
 import { jsonRpc, jsonRpcQuery, formatJSONErr } from "./utils/json-rpc.js"
 import * as naclUtil from "./tweetnacl/util.js"
-import {isValidAccountID} from "./utils/valid.js";
+import { isValidAccountID } from "./utils/valid.js";
 import { KeyPairEd25519, PublicKey } from "./utils/key-pair.js"
-import { serialize, base_decode } from "./utils/serialize.js"
+import { serialize, decodeBase58 } from "./utils/serialize.js"
 import * as TX from "./transaction.js"
 
 import * as bs58 from "./utils/bs58.js";
@@ -14,10 +14,13 @@ import { ntoy, yton } from "./utils/conversion.js";
 //-- NEAR PROTOCOL RPC CALLS
 //---------------------------
 
-let logLevel =0;
-/// 0=no log, 1=info, 2=all
-export function setLogLevel(n:number) {
-    logLevel=n;
+let logLevel = 0;
+/**
+ * sets calls & errors log level
+ * @param n 0=no log, 1=info, 2=all 
+ */
+export function setLogLevel(n: number) {
+    logLevel = n;
 }
 
 
@@ -119,10 +122,10 @@ export type BlockInfo = {
     }
 }
 export function latestBlock(): Promise<BlockInfo> {
-    return jsonRpc('block',{finality:"optimistic"}) 
+    return jsonRpc('block', { finality: "optimistic" })
 };
-export function block(blockId:string): Promise<BlockInfo> {
-    return jsonRpc('block', {block_id:blockId})
+export function block(blockId: string): Promise<BlockInfo> {
+    return jsonRpc('block', { block_id: blockId })
 };
 export function getStatus(): Promise<any> {
     return jsonRpc('status', [null]) as Promise<any>
@@ -159,8 +162,8 @@ export async function broadcast_tx_commit_actions(actions: TX.Action[], signerId
     // converts a recent block hash into an array of bytes 
     // this hash was retrieved earlier when creating the accessKey (Line 26)
     // this is required to prove the tx was recently constructed (within 24hrs)
-    last_block_hash = base_decode(accessKey.block_hash);
-    last_block_height=accessKey.block_height;
+    last_block_hash = decodeBase58(accessKey.block_hash);
+    last_block_height = accessKey.block_height;
 
     // each transaction requires a unique number or nonce
     // this is created by taking the current nonce and incrementing it
@@ -190,25 +193,25 @@ export async function broadcast_tx_commit_actions(actions: TX.Action[], signerId
     const result = await broadcast_tx_commit_signed(signedTransaction)
 
     if (result.status && result.status.Failure) {
-        console.error(JSON.stringify(result))
+        if (logLevel >= 2) console.error(JSON.stringify(result));
         console.error(getLogsAndErrorsFromReceipts(result))
         throw Error(formatJSONErr(result.status.Failure))
     }
 
-    if (logLevel>1) console.log(getLogsAndErrorsFromReceipts(result));
+    if (logLevel >= 1) console.log(getLogsAndErrorsFromReceipts(result));
 
-    if (result.status && result.status.SuccessValue==="") { //returned "void"
+    if (result.status && result.status.SuccessValue === "") { //returned "void"
         return undefined; //void
     }
 
     if (result.status && result.status.SuccessValue) { //some json result value, can by a string|true/false|a number
         const sv = naclUtil.encodeUTF8(naclUtil.decodeBase64(result.status.SuccessValue))
-        if (logLevel>0) console.log("result.status.SuccessValue:", sv);
+        if (logLevel > 0) console.log("result.status.SuccessValue:", sv);
         return JSON.parse(sv)
     }
 
     console.error(JSON.stringify(result))
-    throw Error("!result.status Failure or SuccessValue")    
+    throw Error("!result.status Failure or SuccessValue")
 }
 
 //-------------------------------
@@ -222,7 +225,7 @@ function getLogsAndErrorsFromReceipts(txResult: any) {
             }
             //check status.Failure
             if (ro.outcome.status.Failure) {
-                result.push(formatJSONErr(ro.outcome.status.Failure))
+                result.push(JSON.stringify(ro.outcome.status.Failure));
             }
         }
     } catch (ex) {
@@ -257,21 +260,21 @@ export const ONE_NEAR = new BN("1" + "0".repeat(24));
 export function call(
     contractId: string,
     method: string,
-    params: any,
+    params: Uint8Array | Record<string, any>,
     sender: string,
     privateKey: string,
     TGas: number,
     attachedYoctos?: string): Promise<any> {
 
-    if (logLevel>0) console.log(`call ${contractId} ${method} ${JSON.stringify(params)} --accountId ${sender} -gas:${TGas} --amount:${yton(attachedYoctos||"0")}`);
+    if (logLevel > 0) console.log(`call ${contractId} ${method} ${params instanceof Uint8Array ? "[Uint8Array]" : JSON.stringify(params)} --accountId ${sender} -gas:${TGas} --amount:${yton(attachedYoctos || "0")}`);
 
     return broadcast_tx_commit_actions(
-        [TX.functionCall(method, params, new BN(TGas.toString() + "0".repeat(12)), new BN(attachedYoctos||"0"))],
+        [TX.functionCall(method, params, new BN(TGas.toString() + "0".repeat(12)), new BN(attachedYoctos || "0"))],
         sender, contractId, privateKey)
 }
 
 //-------------------------------
-export function delete_key(pubKey: string, accountId:string, privateKey: string): Promise<any> {
+export function delete_key(pubKey: string, accountId: string, privateKey: string): Promise<any> {
 
     const actions = [TX.deleteKey(PublicKey.fromString(pubKey))]
     return broadcast_tx_commit_actions(actions, accountId, accountId, privateKey)

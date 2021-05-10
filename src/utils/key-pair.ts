@@ -1,6 +1,6 @@
 import {Assignable} from './enums.js';
 import * as nacl from '../tweetnacl/sign.js';
-import { base_encode, base_decode } from './serialize.js';
+import { encodeBase58, decodeBase58 } from './serialize.js';
 //import { Assignable } from './enums';
 
 export type Arrayish = string | ArrayLike<number>;
@@ -46,16 +46,16 @@ export class PublicKey extends Assignable {
     static fromString(encodedKey: string): PublicKey {
         const parts = encodedKey.split(':');
         if (parts.length === 1) {
-            return new PublicKey({keyType:KeyType.ED25519, data:base_decode(parts[0]!)});
+            return new PublicKey({keyType:KeyType.ED25519, data:decodeBase58(parts[0]!)});
         } else if (parts.length === 2) {
-            return new PublicKey({keyType:str_to_key_type(parts[0]!),data:base_decode(parts[1]!)});
+            return new PublicKey({keyType:str_to_key_type(parts[0]!),data:decodeBase58(parts[1]!)});
         } else {
             throw new Error('Invalid encoded key format, must be <curve>:<encoded key>');
         }
     }
 
     toString(): string {
-        return `${key_type_to_str(this.keyType)}:${base_encode(this.data)}`;
+        return `${key_type_to_str(this.keyType)}:${encodeBase58(this.data)}`;
     }
 }
 
@@ -106,7 +106,7 @@ export class KeyPairEd25519 extends KeyPair {
      */
     constructor(secretKey: string) {
         super();
-        const keyPair = nacl.sign_keyPair_fromSecretKey(base_decode(secretKey));
+        const keyPair = nacl.sign_keyPair_fromSecretKey(decodeBase58(secretKey));
         this.publicKey = new PublicKey({keyType:KeyType.ED25519, data:keyPair.publicKey});
         this.secretKey = secretKey;
     }
@@ -123,11 +123,11 @@ export class KeyPairEd25519 extends KeyPair {
      */
     static fromRandom() {
         const newKeyPair = nacl.sign_keyPair();
-        return new KeyPairEd25519(base_encode(newKeyPair.secretKey));
+        return new KeyPairEd25519(encodeBase58(newKeyPair.secretKey));
     }
 
     sign(message: Uint8Array): SignatureAndKey {
-        const signature = nacl.sign_detached(message, base_decode(this.secretKey));
+        const signature = nacl.sign_detached(message, decodeBase58(this.secretKey));
         return { signature, publicKey: this.publicKey };
     }
 
