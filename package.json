@@ -8,7 +8,7 @@
   "types": "lib/index.d.ts",
   "scripts": {
     "build": "npx tsc",
-    "test": "node dist/test"
+    "test": "node lib/test/main"
   },
   "repository": {
     "type": "git",
@@ -34,6 +34,7 @@
     "@types/bs58": "^4.0.1",
     "@types/node-fetch": "^2.5.10",
     "bs58": "^4.0.1",
+    "near-api-js": "^0.42.0",
     "typedoc": "^0.20.35",
     "typescript": "^4"
   },
