@@ -73,46 +73,67 @@ export async function jsonRpcInternal(payload: Record<string, any>): Promise<any
             headers: { 'Content-type': 'application/json; charset=utf-8' }
         }
 
-        let timeoutRetries = 0;
+        let retries = 0;
         while (true) {
-            let fetchResult = await fetch(rpcUrl, rpcOptions);
-            let response = await fetchResult.json()
-
-            if (!fetchResult.ok) throw new Error(rpcUrl + " " + fetchResult.status + " " + fetchResult.statusText)
-
-            let error = response.error
-            if (!error && response.result && response.result.error) {
-                if (response.result.logs && response.result.logs.length) {
-                    console.log("response.result.logs:", response.result.logs);
-                }
-                error = {
-                    message: response.result.error
-                }
+            let errMsg = undefined;
+            let fetchResult = undefined;
+            let response = undefined;
+            let mustRetry: boolean = false;
+            try{
+                fetchResult = await fetch(rpcUrl, rpcOptions);
+                response = await fetchResult.json()
+            } catch(ex){
+                errMsg = ex.message || JSON.stringify(ex);
             }
-            if (error) {
-                const errorMessage = formatJSONErr(error);
-                if (error.data === 'Timeout' || errorMessage.indexOf('Timeout error') != -1) {
-                    const err = new Error('jsonRpc has timed out')
-                    if (timeoutRetries<3){
-                        timeoutRetries++;
-                        console.error(err.message,"RETRY #",timeoutRetries);
-                        continue;
+            if (errMsg) {
+                mustRetry = errMsg.indexOf("EAI_AGAIN")!=-1
+            }
+            else  {
+                if (!fetchResult) {
+                    throw new Error(rpcUrl + " fetchResult is falsey")
+                }
+                if (!fetchResult.ok) {
+                    throw new Error(rpcUrl + " " + fetchResult.status + " " + fetchResult.statusText)
+                }
+                let error = response.error
+                if (!error && response.result && response.result.error) {
+                    if (response.result.logs && response.result.logs.length) {
+                        console.log("response.result.logs:", response.result.logs);
                     }
-                    err.name = 'TimeoutError'
-                    throw err;
+                    error = {
+                        message: response.result.error
+                    }
+                }
+                if (error) {
+                    const formattedJsonErr = formatJSONErr(error);
+                    if (error.data === 'Timeout' || formattedJsonErr.indexOf('Timeout error') != -1) {
+                        mustRetry = true
+                        errMsg = 'jsonRpc has timed out'
+                    }
+                    else {
+                        throw new Error("Error: " + formattedJsonErr);
+                    }
+                }
+                if (!response.result) {
+                    console.log("response.result=",response.result)
+                }
+                return response.result;
+            }
+
+            if (mustRetry) {
+                if (retries<3){
+                    retries++;
+                    console.error("RETRY #",retries,"cause",errMsg);
+                    continue;
                 }
                 else {
-                    throw new Error("Error: " + errorMessage);
+                    throw new Error(errMsg + " (and max retries reached)")
                 }
             }
-            if (!response.result) {
-                console.log("response.result=",response.result)
-            }
-            return response.result;
         }
     }
     catch (ex) {
-        //add rpc url to err info
+        // add rpc url to err info
         throw new Error(ex.message + " (" + rpcUrl + ")")
     }
 }
