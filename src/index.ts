@@ -4,7 +4,6 @@ export * from './transaction.js';
 export * from './contracts/base-smart-contract.js';
 export * from './contracts/NEP141.js';
 export * from './contracts/NEP129.js';
-export * from './utils/conversion.js';
 export * from './utils/bs58.js';
 export * from './utils/json-rpc.js';
 export * from './utils/key-pair.js';

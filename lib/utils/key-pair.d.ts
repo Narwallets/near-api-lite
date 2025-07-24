@@ -1,5 +1,5 @@
 import { Assignable } from './enums.js';
-export declare type Arrayish = string | ArrayLike<number>;
+export type Arrayish = string | ArrayLike<number>;
 export interface SignatureAndKey {
     signature: Uint8Array;
     publicKey: PublicKey;

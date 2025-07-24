@@ -1,8 +1,9 @@
 /// <reference types="node" />
+/// <reference types="node" />
 import BN from 'bn.js';
 export declare function encodeBase58(value: Uint8Array | string): string;
 export declare function decodeBase58(value: string): Uint8Array;
-export declare type Schema = Map<Function, any>;
+export type Schema = Map<Function, any>;
 export declare class BorshError extends Error {
     originalMessage: string;
     fieldPath: string[];

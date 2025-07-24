@@ -1,5 +1,5 @@
 import { SmartContract } from "./base-smart-contract";
-export declare type FungibleTokenMetadata = {
+export type FungibleTokenMetadata = {
     spec: string;
     name: string;
     symbol: string;
@@ -8,7 +8,7 @@ export declare type FungibleTokenMetadata = {
     reference_hash: string | null;
     decimals: number;
 };
-declare type U128String = string;
+type U128String = string;
 export declare class NEP141Trait extends SmartContract {
     ft_transfer(receiver_id: string, amount: U128String, memo?: string): Promise<void>;
     ft_transfer_call(receiver_id: string, amount: U128String, msg: string, memo?: string): Promise<void>;

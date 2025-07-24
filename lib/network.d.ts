@@ -1,4 +1,4 @@
-export declare type NetworkInfo = {
+export type NetworkInfo = {
     name: string;
     rootAccount: string;
     displayName: string;

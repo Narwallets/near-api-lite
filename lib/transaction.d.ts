@@ -1,4 +1,5 @@
 /// <reference types="node" />
+/// <reference types="node" />
 import BN from 'bn.js';
 import { Enum, Assignable } from './utils/enums.js';
 import { KeyType, PublicKey } from './utils/key-pair.js';

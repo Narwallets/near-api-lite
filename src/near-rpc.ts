@@ -4,20 +4,61 @@ import { isValidAccountID } from "./utils/valid.js";
 import { KeyPairEd25519, PublicKey } from "./utils/key-pair.js"
 import { serialize, decodeBase58 } from "./utils/serialize.js"
 import * as TX from "./transaction.js"
+import { ntoy, yton } from "./utils/conversion.js"
 
 import * as bs58 from "./utils/bs58.js";
 import * as sha256 from "./utils/sha256.js"
-import BN = require('bn.js');
-import { ntoy, yton } from "./utils/conversion.js";
+import BN from 'bn.js';
+
+// Buffer type declaration for TypeScript
+declare const Buffer: any;
+
+//---------------------------
+//-- TYPE DEFINITIONS
+//---------------------------
+
+export interface ExecutionError {
+    error_message: string;
+    error_type: string;
+}
+
+export interface FinalExecutionStatus {
+    SuccessValue?: string;
+    Failure?: ExecutionError;
+}
+
+export interface ExecutionOutcome {
+    logs: string[];
+    receipt_ids: string[];
+    gas_burnt: number;
+    status: any;
+}
+
+export interface ExecutionOutcomeWithId {
+    id: string;
+    outcome: ExecutionOutcome;
+}
+
+export interface FinalExecutionOutcome {
+    status: FinalExecutionStatus | any;
+    transaction: any;
+    transaction_outcome: ExecutionOutcomeWithId;
+    receipts_outcome: ExecutionOutcomeWithId[];
+}
 
 //---------------------------
 //-- NEAR PROTOCOL RPC CALLS
 //---------------------------
 
+//utility
+export async function sleep(ms: number): Promise<void> {
+    return new Promise(resolve => setTimeout(resolve, ms));
+}
+
 let logLevel = 0;
 /**
  * sets calls & errors log level
- * @param n 0=no log, 1=info, 2=all 
+ * @param n 0=no log, 1=info, 2=all
  */
 export function setLogLevel(n: number) {
     logLevel = n;
@@ -69,7 +110,7 @@ export type StateResult = {
     storage_usage: number; // 2080
 }
 
-/* 
+/*
 near.state example result
 result: {
     amount: "27101097909936818225912322116"
@@ -86,10 +127,14 @@ export async function queryAccount(accountId: string): Promise<StateResult> {
     try {
         return await jsonRpcQuery("account/" + accountId) as Promise<StateResult>
     }
-    catch (ex) {
+    catch (ex: any) {
         //intercept and make err message better for "account not found"
-        const reason = ex.message.replace("while viewing", "")
-        throw Error(reason)
+        if (ex.message) {
+            throw Error(ex.message.replace("while viewing", ""))
+        }
+        else {
+            throw ex
+        }
     }
 };
 
@@ -138,16 +183,22 @@ export function getGenesisConfig(): Promise<any> {
 //---------------------------------
 //---- VALIDATORS & STAKING POOLS -
 //---------------------------------
-export function getValidators(): Promise<any> {
+export function getEpochValidatorInfo(): Promise<any> {
     return jsonRpc('validators', [null]) as Promise<any>
+};
+
+// Backward compatibility - keep the old function name as an alias
+export function getValidators(): Promise<any> {
+    return getEpochValidatorInfo();
 };
 
 
 //-------------------------------
-export function broadcast_tx_commit_signed(signedTransaction: TX.SignedTransaction): Promise<any> {
+export let last_tx_result: FinalExecutionOutcome;
+export function broadcast_tx_commit_signed(signedTransaction: TX.SignedTransaction): Promise<FinalExecutionOutcome> {
     const borshEncoded = signedTransaction.encode();
     const b64Encoded = Buffer.from(borshEncoded).toString('base64')
-    return jsonRpc('broadcast_tx_commit', [b64Encoded]) as Promise<any>
+    return jsonRpc('broadcast_tx_commit', [b64Encoded]) as Promise<FinalExecutionOutcome>
 };
 
 //-------------------------------
@@ -156,89 +207,113 @@ export async function broadcast_tx_commit_actions(actions: TX.Action[], signerId
     const keyPair = KeyPairEd25519.fromString(privateKey);
     const publicKey = keyPair.getPublicKey();
 
-    const accessKey = await access_key(signerId, publicKey.toString());
-    if (accessKey.permission !== 'FullAccess') throw Error(`The key is not full access for account '${signerId}'`)
+    let retry = 0
+    let shouldRetry = false;
+    do {
+        let accessKey = await access_key(signerId, publicKey.toString());
+        if (accessKey.permission !== 'FullAccess') throw Error(`The key is not full access for account '${signerId}'`)
 
-    // converts a recent block hash into an array of bytes 
-    // this hash was retrieved earlier when creating the accessKey (Line 26)
-    // this is required to prove the tx was recently constructed (within 24hrs)
-    last_block_hash = decodeBase58(accessKey.block_hash);
-    last_block_height = accessKey.block_height;
+        // converts a recent block hash into an array of bytes
+        // this hash was retrieved earlier when creating the accessKey (Line 26)
+        // this is required to prove the tx was recently constructed (within 24hrs)
+        last_block_hash = decodeBase58(accessKey.block_hash);
+        last_block_height = accessKey.block_height;
 
-    // each transaction requires a unique number or nonce
-    // this is created by taking the current nonce and incrementing it
-    const nonce = ++accessKey.nonce;
+        // each transaction requires a unique number or nonce
+        // this is created by taking the current nonce and incrementing it
+        let nonce = ++accessKey.nonce;
 
-    const transaction = TX.createTransaction(
-        signerId,
-        publicKey,
-        receiver,
-        nonce,
-        actions,
-        last_block_hash
-    )
+        const transaction = TX.createTransaction(
+            signerId,
+            publicKey,
+            receiver,
+            nonce,
+            actions,
+            last_block_hash
+        )
 
-    const serializedTx = serialize(TX.SCHEMA, transaction);
-    const serializedTxHash = new Uint8Array(sha256.hash(serializedTx));
-    const signature = keyPair.sign(serializedTxHash)
+        const serializedTx = serialize(TX.SCHEMA, transaction);
+        const serializedTxHash = new Uint8Array(sha256.hash(serializedTx));
+        const signature = keyPair.sign(serializedTxHash)
 
-    const signedTransaction = new TX.SignedTransaction({
-        transaction: transaction,
-        signature: new TX.Signature({
-            keyType: transaction.publicKey.keyType,
-            data: signature.signature
-        })
-    });
+        const signedTransaction = new TX.SignedTransaction({
+            transaction: transaction,
+            signature: new TX.Signature({
+                keyType: transaction.publicKey.keyType,
+                data: signature.signature
+            })
+        });
 
-    const result = await broadcast_tx_commit_signed(signedTransaction)
+        shouldRetry = false;
+        try {
+            last_tx_result = await broadcast_tx_commit_signed(signedTransaction)
+        }
+        catch (ex: any) {
+            if (retry < 3 && ex && ex.message && (ex.message as string).includes("InvalidTxError:Expired")) {
+                console.log(ex.message)
+                retry += 1
+                console.log(`RETRY #${retry} in 1 second`)
+                await sleep(1000);
+                shouldRetry = true;
+            }
+            else {
+                throw (ex)
+            }
+        }
+    } while (shouldRetry);
 
-    if (result.status && result.status.Failure) {
-        if (logLevel >= 2) console.error(JSON.stringify(result));
-        console.error(getLogsAndErrorsFromReceipts(result))
-        throw Error(formatJSONErr(result.status.Failure))
+    if (last_tx_result.status && (last_tx_result.status as FinalExecutionStatus).Failure) {
+        if (logLevel >= 2) console.error(JSON.stringify(last_tx_result));
+        console.error(getLogsAndErrorsFromReceipts(last_tx_result))
+        throw Error(formatJSONErr((last_tx_result.status as FinalExecutionStatus).Failure))
     }
 
-    if (logLevel >= 1) console.log(getLogsAndErrorsFromReceipts(result));
+    if (logLevel >= 1) console.log(getLogsAndErrorsFromReceipts(last_tx_result));
 
-    if (result.status && result.status.SuccessValue === "") { //returned "void"
+    if (last_tx_result.status && (last_tx_result.status as FinalExecutionStatus).SuccessValue === "") { //returned "void"
         return undefined; //void
     }
 
-    if (result.status && result.status.SuccessValue) { //some json result value, can by a string|true/false|a number
-        const sv = naclUtil.encodeUTF8(naclUtil.decodeBase64(result.status.SuccessValue))
+    if (last_tx_result.status && (last_tx_result.status as FinalExecutionStatus).SuccessValue) { //some json result value, can by a string|true/false|a number
+        const sv = naclUtil.encodeUTF8(naclUtil.decodeBase64((last_tx_result.status as FinalExecutionStatus).SuccessValue || ""))
         if (logLevel > 0) console.log("result.status.SuccessValue:", sv);
         return JSON.parse(sv)
     }
 
-    console.error(JSON.stringify(result))
+    console.error(JSON.stringify(last_tx_result))
     throw Error("!result.status Failure or SuccessValue")
 }
 
 //-------------------------------
-function getLogsAndErrorsFromReceipts(txResult: any) {
-    let result = []
+export function extractLogsAndErrorsFromTxResult(txResult: any): string[] {
+    const result = []
     try {
-        for (let ro of txResult.receipts_outcome) {
+        for (const ro of txResult.receipts_outcome) {
             //get logs
-            for (let logLine of ro.outcome.logs) {
+            for (const logLine of ro.outcome.logs) {
                 result.push(logLine)
             }
             //check status.Failure
             if (ro.outcome.status.Failure) {
-                result.push(JSON.stringify(ro.outcome.status.Failure));
+                result.push(formatJSONErr(ro.outcome.status.Failure))
             }
         }
     } catch (ex) {
         result.push("internal error parsing result outcome")
     }
-    finally {
-        return result.join('\n')
-    }
+    return result
+}
+
+//-------------------------------
+function getLogsAndErrorsFromReceipts(txResult: any): string {
+    const result = extractLogsAndErrorsFromTxResult(txResult)
+    result.unshift("Transaction failed.")
+    return result.join('\n')
 }
 
 //-------------------------------
 export function sendYoctos(sender: string, receiver: string, amountYoctos: string, privateKey: string): Promise<any> {
-    const actions = [TX.transfer(new BN.BN(amountYoctos))]
+    const actions = [TX.transfer(new BN(amountYoctos))]
     return broadcast_tx_commit_actions(actions, sender, receiver, privateKey)
 }
 

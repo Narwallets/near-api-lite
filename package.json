@@ -7,7 +7,7 @@
   "main": "lib/index.js",
   "types": "lib/index.d.ts",
   "scripts": {
-    "build": "npx tsc",
+    "build": "yarn tsc",
     "test": "node dist/test"
   },
   "repository": {

@@ -3,10 +3,14 @@ import fetch from 'node-fetch'
 import * as naclUtil from "../tweetnacl/util.js";
 import { ytonFull } from "./conversion.js";
 
-let rpcUrl: string = "https://rpc.mainnet.near.org/"
+let rpcUrl: string = "https://free.rpc.fastnear.com/"
 
 export function setRpcUrl(newUrl: string) {
     rpcUrl = newUrl;
+}
+
+export function getRpcUrl(): string {
+    return rpcUrl;
 }
 
 const fetchHeaders: Record<string, string> = { 'Content-type': 'application/json; charset=utf-8' }
@@ -21,7 +25,7 @@ export function getHeaders() {
  * Extracts a user-readable format from a smart-contract error result
  * converts yoctoNears to NEAR amounts
  * @param obj result.status.failure or other err objects
- * @returns 
+ * @returns
  */
 export function formatJSONErr(obj: any): any {
 
@@ -63,75 +67,120 @@ export function formatJSONErr(obj: any): any {
     return text
 }
 
-let id = 0
-export async function jsonRpcInternal(payload: Record<string, any>): Promise<any> {
+// RATE LIMITING AND RETRIES CONFIGURATION
+const MIN_RPC_CALL_INTERVAL_MS = 250; // minimum interval between RPC calls in milliseconds
+let lastRpcCall = Date.now() - MIN_RPC_CALL_INTERVAL_MS; // timestamp of last RPC call
 
+// Compute sleep time for 429 responses with exponential backoff and header hints
+function compute429SleepTime(fetchResult: any, retry429Count: number): number {
+    let minSleepTime = 250 + 500 * (retry429Count - 1);
+    let sleepTime = 250 * Math.pow(2, retry429Count - 1);
+    try {
+        const retryAfter = fetchResult.headers.get('Retry-After');
+        const rateLimitReset = fetchResult.headers.get('X-RateLimit-Reset');
+        const rateLimitRetryAfter = fetchResult.headers.get('X-RateLimit-Retry-After-Seconds');
+        if (retryAfter && retryAfter !== '0') {
+            const secs = parseInt(retryAfter, 10);
+            if (!isNaN(secs)) {
+                sleepTime = secs * 1000;
+            }
+        } else if (rateLimitRetryAfter && rateLimitRetryAfter !== '0') {
+            sleepTime = parseInt(rateLimitRetryAfter, 10) * 1000;
+        } else if (rateLimitReset) {
+            const resetTime = parseInt(rateLimitReset, 10) * 1000;
+            sleepTime = Math.max(0, resetTime - Date.now());
+        }
+    } catch (e) {
+        console.error('Error computing sleep time:', e);
+    }
+    return Math.min(Math.max(sleepTime, minSleepTime), 30000);
+}
+// Sleep utility for retries
+async function sleep(ms: number): Promise<void> {
+    return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+// Enhanced jsonRpcInternal with rate limiting, 429 & timeout retries
+export async function jsonRpcInternal(payload: Record<string, any>): Promise<any> {
+    let fetchResult: any = null;
     try {
         const rpcOptions = {
             body: JSON.stringify(payload),
-            method: "POST",
-            headers: { 'Content-type': 'application/json; charset=utf-8' }
+            method: 'POST',
+            headers: { ...fetchHeaders }
+        };
+        // ensure minimum interval between calls
+        const elapsedMs = Date.now() - lastRpcCall;
+        if (elapsedMs < MIN_RPC_CALL_INTERVAL_MS) {
+            await sleep(MIN_RPC_CALL_INTERVAL_MS - elapsedMs);
         }
-
+        let timeoutOccurred = false;
         let timeoutRetries = 0;
+        let retry429Count = 0;
+        let accountDoesNotExistsRetries = 0;
         while (true) {
-            let fetchResult = await fetch(rpcUrl, rpcOptions);
-            let response = await fetchResult.json()
-
-            if (!fetchResult.ok) throw new Error(rpcUrl + " " + fetchResult.status + " " + fetchResult.statusText)
-
-            let error = response.error
-            if (!error && response.result && response.result.error) {
-                if (response.result.logs && response.result.logs.length) {
-                    console.log("response.result.logs:", response.result.logs);
+            timeoutOccurred = false;
+            lastRpcCall = Date.now();
+            fetchResult = await fetch(rpcUrl, rpcOptions);
+            if (fetchResult.status === 429) {
+                retry429Count++;
+                if (retry429Count > 10) {
+                    throw new Error(`${rpcUrl} ${fetchResult.status} ${fetchResult.statusText}`);
                 }
-                error = {
-                    message: response.result.error
+                const delay = compute429SleepTime(fetchResult, retry429Count);
+                console.error('429 too many requests, sleeping', `${delay}ms`, 'RETRY #', retry429Count);
+                await sleep(delay);
+                continue;
+            } else if (fetchResult.status === 408) {
+                timeoutOccurred = true;
+            } else {
+                const responseJson = await fetchResult.json();
+                if (!fetchResult.ok) {
+                    throw new Error(`${fetchResult.status} ${fetchResult.statusText}`);
                 }
-            }
-            if (error) {
-                const errorMessage = formatJSONErr(error);
-                if (error.data === 'Timeout' || errorMessage.indexOf('Timeout error') != -1) {
-                    const err = new Error('jsonRpc has timed out')
-                    if (timeoutRetries<3){
-                        timeoutRetries++;
-                        console.error(err.message,"RETRY #",timeoutRetries);
-                        continue;
+                let error = responseJson.error;
+                if (!error && responseJson.result && responseJson.result.error) {
+                    if (responseJson.result.logs && responseJson.result.logs.length) {
+                        console.log('response.result.logs:', responseJson.result.logs);
                     }
-                    err.name = 'TimeoutError'
-                    throw err;
+                    error = { message: responseJson.result.error, data: undefined };
                 }
-                else {
-                    throw new Error("Error: " + errorMessage);
+                if (error) {
+                    const errorMessage = formatJSONErr(error);
+                    if (error.data === 'Timeout' || errorMessage.includes('Timeout error')) {
+                        timeoutOccurred = true;
+                    } else if (!rpcUrl.includes('mainnet') && errorMessage.includes('does not exist') && accountDoesNotExistsRetries < 2) {
+                        accountDoesNotExistsRetries++;
+                        await sleep(300);
+                        continue;
+                    } else {
+                        throw new Error(`Error: ${errorMessage}`);
+                    }
+                } else {
+                    if (!responseJson.result) {
+                        console.log('response.result=', responseJson.result);
+                    }
+                    return responseJson.result;
                 }
             }
-            if (!response.result) {
-                console.log("response.result=",response.result)
+            if (timeoutOccurred) {
+                const err = new Error('jsonRpc has timed out');
+                if (timeoutRetries < 5) {
+                    timeoutRetries++;
+                    console.error(err.message, 'RETRY #', timeoutRetries);
+                    continue;
+                }
+                err.name = 'TimeoutError';
+                throw err;
             }
-            return response.result;
         }
-    }
-    catch (ex) {
-        //add rpc url to err info
-        throw new Error(ex.message + " (" + rpcUrl + ")")
+    } catch (ex: any) {
+        console.error('Err status', fetchResult?.status);
+        throw new Error(`${ex.message} (${rpcUrl})`);
     }
 }
-// if (!response.ok) {
-//     if (response.status === 503) {
-//         console.warn(`Retrying HTTP request for ${url} as it's not available now`);
-//         return null;
-//     }
-//     throw createError(response.status, await response.text());
-// }
-//     return response;
-// } catch (error) {
-//     if (error.toString().includes('FetchError')) {
-//         console.warn(`Retrying HTTP request for ${url} because of error: ${error}`);
-//         return null;
-//     }
-//     throw error;
-// }
-
+// Internal JSON-RPC ID counter
+let id = 0;
 
 /**
  * makes a jsonRpc call with {method}

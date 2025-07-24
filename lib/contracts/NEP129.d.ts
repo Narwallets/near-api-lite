@@ -1,4 +1,4 @@
-export declare type ContractInfo = {
+export type ContractInfo = {
     dataVersion: number;
     name: string;
     version: string;

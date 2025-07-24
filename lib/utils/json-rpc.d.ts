@@ -1,4 +1,5 @@
 export declare function setRpcUrl(newUrl: string): void;
+export declare function getRpcUrl(): string;
 export declare function addHeader(name: string, value: string): void;
 export declare function getHeaders(): Record<string, string>;
 /**

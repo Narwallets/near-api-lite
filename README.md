@@ -51,6 +51,16 @@ This is a simpler API intended to include the minimal required API to interact w
 1) Add to your project by running:
 ```bash
 npm i near-api-lite
+# or with yarn
+yarn add near-api-lite
 ```
 
-Happy coding! 🚀 
+## Development:
+
+To build the project:
+```bash
+yarn install
+yarn build
+```
+
+Happy coding! 🚀
