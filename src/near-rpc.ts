@@ -198,8 +198,43 @@ export let last_tx_result: FinalExecutionOutcome;
 export function broadcast_tx_commit_signed(signedTransaction: TX.SignedTransaction): Promise<FinalExecutionOutcome> {
     const borshEncoded = signedTransaction.encode();
     const b64Encoded = Buffer.from(borshEncoded).toString('base64')
-    return jsonRpc('broadcast_tx_commit', [b64Encoded]) as Promise<FinalExecutionOutcome>
-};
+    return jsonRpc('broadcast_tx_commit', {
+        signed_tx_base64: b64Encoded,
+        wait_until: "EXECUTED" // executed so we get STATUS & LOGS from ALL important receipts
+    }) as Promise<FinalExecutionOutcome>
+    /*
+        -----------------------
+        wait_until param
+        -----------------------
+        #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+        pub enum TxExecutionStatus {
+
+        /// Transaction is waiting to be included into the block
+        None,
+
+        /// Transaction is included into the block. The block may be not finalized yet
+        Included,
+
+        /// Transaction is included into the block +
+        /// All non-refund transaction receipts finished their execution.
+        /// The corresponding blocks for tx and each receipt may be not finalized yet
+        #[default]
+        ExecutedOptimistic,
+
+        /// Transaction is included into finalized block
+        IncludedFinal,
+
+        /// Transaction is included into finalized block +
+        /// All non-refund transaction receipts finished their execution.
+        /// The corresponding blocks for each receipt may be not finalized yet
+        Executed,
+
+        /// Transaction is included into finalized block +
+        /// Execution of all transaction receipts is finalized, including refund receipts
+        Final,
+        }
+      */
+}
 
 //-------------------------------
 export async function broadcast_tx_commit_actions(actions: TX.Action[], signerId: string, receiver: string, privateKey: string): Promise<any> {
