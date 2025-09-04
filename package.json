@@ -1,7 +1,7 @@
 {
   "name": "near-api-lite",
-  "version": "0.0.1",
-  "description": "non-official light near-api for ts/js",
+  "version": "1.0.0",
+  "description": "non-official light near-api for nodejs/ts",
   "type": "commonjs",
   "module": "lib/index.js",
   "main": "lib/index.js",
@@ -22,7 +22,7 @@
     "light",
     "web3"
   ],
-  "author": "Lucio Tato <luciotato@gmail.com> (https://github.com/luciotato)",
+  "author": "Lucio Tato <lucio@metapool.app> (https://github.com/luciotato)",
   "license": "ISC",
   "bugs": {
     "url": "https://github.com/Narwallets/near-api-lite/issues"
