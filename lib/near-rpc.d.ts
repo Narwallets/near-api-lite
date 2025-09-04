@@ -30,6 +30,11 @@ export declare function sleep(ms: number): Promise<void>;
  * @param n 0=no log, 1=info, 2=all
  */
 export declare function setLogLevel(n: number): void;
+/**
+ * sets debug mode for RPC calls
+ * @param onOff true to enable debug logging
+ */
+export declare function setDebugMode(onOff: boolean): void;
 export declare function lastBlockHashSeen(): Uint8Array;
 export declare function lastBlockHeightSeen(): number;
 export declare function bufferToHex(buffer: any): string;
@@ -45,7 +50,7 @@ export type StateResult = {
 };
 export declare function queryAccount(accountId: string): Promise<StateResult>;
 export declare function access_key(accountId: string, publicKey: string): Promise<any>;
-export declare function viewRaw(contractId: string, method: string, params?: any): Promise<any>;
+export declare function viewRaw(contractId: string, method: string, params?: Record<string, any>): Promise<any>;
 export declare function view(contractId: string, method: string, params?: any): Promise<any>;
 export type BlockInfo = {
     header: {

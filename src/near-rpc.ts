@@ -6,12 +6,8 @@ import { serialize, decodeBase58 } from "./utils/serialize.js"
 import * as TX from "./transaction.js"
 import { ntoy, yton } from "./utils/conversion.js"
 
-import * as bs58 from "./utils/bs58.js";
 import * as sha256 from "./utils/sha256.js"
 import BN from 'bn.js';
-
-// Buffer type declaration for TypeScript
-declare const Buffer: any;
 
 //---------------------------
 //-- TYPE DEFINITIONS
@@ -62,6 +58,14 @@ let logLevel = 0;
  */
 export function setLogLevel(n: number) {
     logLevel = n;
+}
+
+/**
+ * sets debug mode for RPC calls
+ * @param onOff true to enable debug logging
+ */
+export function setDebugMode(onOff: boolean) {
+    logLevel = onOff ? 2 : 0;
 }
 
 
@@ -125,7 +129,11 @@ result: {
 
 export async function queryAccount(accountId: string): Promise<StateResult> {
     try {
-        return await jsonRpcQuery("account/" + accountId) as Promise<StateResult>
+        return await jsonRpcQuery({
+            request_type: "view_account",
+            finality: "final",
+            account_id: accountId
+        }) as Promise<StateResult>
     }
     catch (ex: any) {
         //intercept and make err message better for "account not found"
@@ -140,14 +148,27 @@ export async function queryAccount(accountId: string): Promise<StateResult> {
 
 //-------------------------------
 export function access_key(accountId: string, publicKey: string): Promise<any> {
-    return jsonRpcQuery(`access_key/${accountId}/${publicKey}`) as Promise<any>
+    return jsonRpcQuery({
+        request_type: "view_access_key",
+        finality: "final",
+        account_id: accountId,
+        public_key: publicKey
+    })
 };
 
 //-------------------------------
-export function viewRaw(contractId: string, method: string, params?: any): Promise<any> {
+export function viewRaw(contractId: string, method: string, params?: Record<string, any>): Promise<any> {
     let encodedParams = undefined;
-    if (params) encodedParams = bs58.encode(Buffer.from(JSON.stringify(params)));
-    return jsonRpcQuery("call/" + contractId + "/" + method, encodedParams);
+    if (params) encodedParams = Buffer.from(JSON.stringify(params)).toString("base64")
+    return jsonRpcQuery(
+        {
+            request_type: "call_function",
+            finality: "final",
+            account_id: contractId,
+            method_name: method,
+            args_base64: encodedParams
+        }
+    )
 }
 export async function view(contractId: string, method: string, params?: any): Promise<any> {
     const data = await viewRaw(contractId, method, params);
@@ -237,6 +258,14 @@ export function broadcast_tx_commit_signed(signedTransaction: TX.SignedTransacti
 }
 
 //-------------------------------
+type AccessKeyInfo = {
+    nonce: number;
+    block_hash: string;
+    block_height: number;
+    timestamp: number;
+}
+// use cached nonces (reading always from access key does not get right value because txs in transit)
+let accessKeyInfoCache: Record<string, AccessKeyInfo> = {};
 export async function broadcast_tx_commit_actions(actions: TX.Action[], signerId: string, receiver: string, privateKey: string): Promise<any> {
 
     const keyPair = KeyPairEd25519.fromString(privateKey);
@@ -244,19 +273,36 @@ export async function broadcast_tx_commit_actions(actions: TX.Action[], signerId
 
     let retry = 0
     let shouldRetry = false;
+    let cachedAccessKey: AccessKeyInfo;
     do {
-        let accessKey = await access_key(signerId, publicKey.toString());
-        if (accessKey.permission !== 'FullAccess') throw Error(`The key is not full access for account '${signerId}'`)
+        cachedAccessKey = accessKeyInfoCache[publicKey.toString()];
+        if (retry > 0 || !cachedAccessKey || (Date.now() - cachedAccessKey.timestamp) > 30000) {
+            let accessKeyInfo = await access_key(signerId, publicKey.toString());
+            if (accessKeyInfo.permission !== 'FullAccess') throw Error(`The key is not full access for account '${signerId}'`)
+            cachedAccessKey = {
+                timestamp: Date.now(),
+                nonce: accessKeyInfo.nonce,
+                block_hash: accessKeyInfo.block_hash,
+                block_height: accessKeyInfo.block_height
+            };
+            accessKeyInfoCache[publicKey.toString()] = cachedAccessKey;
+            if (logLevel >= 2) console.log(`Re-fetched from chain access key for ${signerId}: got nonce:${cachedAccessKey.nonce}`);
+        }
+        else {
+            if (logLevel >= 2) console.log(`Using cached access key for ${signerId}: have nonce:${cachedAccessKey.nonce}`);
+        }
 
         // converts a recent block hash into an array of bytes
         // this hash was retrieved earlier when creating the accessKey (Line 26)
         // this is required to prove the tx was recently constructed (within 24hrs)
-        last_block_hash = decodeBase58(accessKey.block_hash);
-        last_block_height = accessKey.block_height;
+        last_block_hash = decodeBase58(cachedAccessKey.block_hash);
+        last_block_height = cachedAccessKey.block_height;
 
         // each transaction requires a unique number or nonce
         // this is created by taking the current nonce and incrementing it
-        let nonce = ++accessKey.nonce;
+        cachedAccessKey.nonce += 1
+        let nonce = cachedAccessKey.nonce;
+        if (logLevel >= 2) console.log(`nonce++ for ${signerId} = ${nonce}`);
 
         const transaction = TX.createTransaction(
             signerId,
@@ -306,10 +352,12 @@ export async function broadcast_tx_commit_actions(actions: TX.Action[], signerId
     if (logLevel >= 1) console.log(getLogsAndErrorsFromReceipts(last_tx_result));
 
     if (last_tx_result.status && (last_tx_result.status as FinalExecutionStatus).SuccessValue === "") { //returned "void"
+        cachedAccessKey.timestamp = Date.now(); // make cache valid for 5 secs more
         return undefined; //void
     }
 
     if (last_tx_result.status && (last_tx_result.status as FinalExecutionStatus).SuccessValue) { //some json result value, can by a string|true/false|a number
+        cachedAccessKey.timestamp = Date.now(); // make cache valid for 5 secs more
         const sv = naclUtil.encodeUTF8(naclUtil.decodeBase64((last_tx_result.status as FinalExecutionStatus).SuccessValue || ""))
         if (logLevel > 0) console.log("result.status.SuccessValue:", sv);
         return JSON.parse(sv)

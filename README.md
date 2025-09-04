@@ -1,23 +1,39 @@
 # near-api-lite
 non-official Narwallets' near-api js/ts lite version - **for node.js**
 
-near-api-lite is a a subset of the official [near-api-js](https://www.npmjs.com/package/near-api-js)
+near-api-lite is a subset of the official [near-api-js](https://www.npmjs.com/package/near-api-js)
 
-It has no dependencies and unpacked size is 240kb (approx. 10% of near-api-js)
+It has no dependencies and unpacked size is ~240kb (approx. 10% of near-api-js)
+
+## Features
+
+* Transaction creation and signing
+* Borsh serialization
+* NEAR RPC calls with caching and retry logic
+* Epoch information computation
+* Utility functions for amount conversion
+* TweetNacl cryptographic functions (sign/25519 curve)
+* Smart contract interaction
+* Network configuration
+
+## Recent Improvements
+
+* **Access Key Caching**: Reduces RPC calls by caching access key information
+* **Enhanced RPC Calls**: Object-based parameters for better consistency
+* **Debug Mode**: Built-in debug functionality for development
+* **Epoch Utilities**: Compute current epoch information and timing
+* **Additional Type Definitions**: Comprehensive TypeScript types
+* **Amount Formatting**: Utilities for converting and formatting NEAR amounts
 
 ## TODO
 
 * create near-api-lite-browser
 
-### Differences:
+### Differences from near-api-js:
 
-* Smaller, just core functionality, no dependencies
-
-### What's included
-
-* Transaction
-* Borsh Serializer
-* a .ts cut-down version fo TweetNacl (only sign/25519 curve)
+* Smaller footprint, just core functionality, no dependencies
+* Optimized for performance with caching mechanisms
+* Enhanced error handling and retry logic
 * bn.js
 * json-rpc (minimal)
 * near-rpc (minimal)

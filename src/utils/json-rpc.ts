@@ -1,6 +1,5 @@
 import fetch from 'node-fetch'
 
-import * as naclUtil from "../tweetnacl/util.js";
 import { ytonFull } from "./conversion.js";
 
 let rpcUrl: string = "https://free.rpc.fastnear.com/"
@@ -202,8 +201,18 @@ export async function jsonRpc(method: string, jsonRpcParams: any): Promise<any> 
  * @param {string} queryWhat : account/xx | call/contract/method
  * @param {any} params : { amount:"2020202202212"}
  */
-export async function jsonRpcQuery(queryWhat: string, params?: any): Promise<any> {
-    if (typeof params == "object" && Object.keys(params).length == 0) { params = undefined }
-    let queryParams = [queryWhat, params || ""] //params for the fn call - something - the jsonrpc call fail if there's a single item in the array
-    return await jsonRpc("query", queryParams);
+export async function jsonRpcQuery(queryWhat: string, params?: any): Promise<any>;
+/**
+ * makes a jsonRpc "query" call with object parameters
+ * @param params : { request_type: "view_account", finality: "final", account_id: "..." }
+ */
+export async function jsonRpcQuery(params: Record<string, any>): Promise<any>;
+export async function jsonRpcQuery(queryWhatOrParams: string | Record<string, any>, params?: any): Promise<any> {
+    if (typeof queryWhatOrParams === "string") {
+        if (typeof params == "object" && Object.keys(params).length == 0) { params = undefined }
+        let queryParams = [queryWhatOrParams, params || ""] //params for the fn call - something - the jsonrpc call fail if there's a single item in the array
+        return await jsonRpc("query", queryParams);
+    } else {
+        return await jsonRpc("query", queryWhatOrParams);
+    }
 }

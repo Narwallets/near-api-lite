@@ -22,3 +22,8 @@ export declare function jsonRpc(method: string, jsonRpcParams: any): Promise<any
  * @param {any} params : { amount:"2020202202212"}
  */
 export declare function jsonRpcQuery(queryWhat: string, params?: any): Promise<any>;
+/**
+ * makes a jsonRpc "query" call with object parameters
+ * @param params : { request_type: "view_account", finality: "final", account_id: "..." }
+ */
+export declare function jsonRpcQuery(params: Record<string, any>): Promise<any>;
