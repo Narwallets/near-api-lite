@@ -70,9 +70,14 @@ export function setDebugMode(onOff: boolean) {
 
 
 //--helper fn
-let last_block_hash: Uint8Array;
+let last_block_hash: string;
+let last_block_hash_timestamp: number = 0;
+function setLastBlockHash(bh: string) {
+    last_block_hash = bh;
+    last_block_hash_timestamp = Date.now();
+}
 export function lastBlockHashSeen(): Uint8Array {
-    return last_block_hash
+    return decodeBase58(last_block_hash );
 }
 
 let last_block_height: number;
@@ -181,10 +186,12 @@ export async function view(contractId: string, method: string, params?: any): Pr
 //--------------------
 export type BlockInfo = {
     header: {
+        hash: string;
         height: number
         timestamp: number;
         epoch_id: string;
         next_epoch_id: string;
+        gas_price: string;
     }
 }
 export function latestBlock(): Promise<BlockInfo> {
@@ -258,59 +265,66 @@ export function broadcast_tx_commit_signed(signedTransaction: TX.SignedTransacti
 }
 
 //-------------------------------
-type AccessKeyInfo = {
-    nonce: number;
-    block_hash: string;
-    block_height: number;
+type AkCachedNonce = {
     timestamp: number;
+    nonce: number;
 }
 // use cached nonces (reading always from access key does not get right value because txs in transit)
-let accessKeyInfoCache: Record<string, AccessKeyInfo> = {};
+let akCachedNonces: Record<string, AkCachedNonce> = {};
 export async function broadcast_tx_commit_actions(actions: TX.Action[], signerId: string, receiver: string, privateKey: string): Promise<any> {
 
     const keyPair = KeyPairEd25519.fromString(privateKey);
     const publicKey = keyPair.getPublicKey();
 
-    let retry = 0
-    let shouldRetry = false;
-    let cachedAccessKey: AccessKeyInfo;
+    let akCachedNonce: AkCachedNonce;
+
+    akCachedNonce = akCachedNonces[publicKey.toString()];
+    if (!akCachedNonce || (Date.now() - akCachedNonce.timestamp) > 30000) {
+        let accessKeyInfo = await access_key(signerId, publicKey.toString());
+        // seize the opportunity to update last_block_hash too
+        if (accessKeyInfo.block_hash) setLastBlockHash(accessKeyInfo.block_hash);
+        if (accessKeyInfo.block_height) last_block_height = accessKeyInfo.block_height;
+
+        if (accessKeyInfo.permission !== 'FullAccess') throw Error(`The key is not full access for account '${signerId}'`)
+        akCachedNonce = {
+            timestamp: Date.now(),
+            nonce: accessKeyInfo.nonce,
+        };
+        akCachedNonces[publicKey.toString()] = akCachedNonce;
+        if (logLevel >= 2) console.log(`Re-fetched ak from chain ${signerId}: got nonce:${akCachedNonce.nonce}`);
+    }
+    else {
+        if (logLevel >= 2) console.log(`Using cached ak for ${signerId}, nonce:${akCachedNonce.nonce}`);
+    }
+
+    // each transaction requires a unique number or nonce
+    // this is created by taking the current nonce and incrementing it
+    akCachedNonce.nonce += 1
+    let nonce = akCachedNonce.nonce;
+    if (logLevel >= 2) console.log(`nonce++ for ${signerId} = ${nonce}`);
+
+    let hashTooOldRetries = 0
+    let invalidTxErrorExpired = false;
+    // Loop to retry if InvalidTxError:Expired -> meaning the last_block_hash is too old
     do {
-        cachedAccessKey = accessKeyInfoCache[publicKey.toString()];
-        if (retry > 0 || !cachedAccessKey || (Date.now() - cachedAccessKey.timestamp) > 30000) {
-            let accessKeyInfo = await access_key(signerId, publicKey.toString());
-            if (accessKeyInfo.permission !== 'FullAccess') throw Error(`The key is not full access for account '${signerId}'`)
-            cachedAccessKey = {
-                timestamp: Date.now(),
-                nonce: accessKeyInfo.nonce,
-                block_hash: accessKeyInfo.block_hash,
-                block_height: accessKeyInfo.block_height
-            };
-            accessKeyInfoCache[publicKey.toString()] = cachedAccessKey;
-            if (logLevel >= 2) console.log(`Re-fetched from chain access key for ${signerId}: got nonce:${cachedAccessKey.nonce}`);
+        // get last block hash if we don't have it or it is too old (more than 15 secs old)
+        // this is required to prove the tx was recently constructed (within 100 blocks)
+        if (Date.now() > last_block_hash_timestamp + 15000) {
+            // if cached block_hash is older than 15 secs, refresh it
+            let blockInfo = await jsonRpc("block", { finality: 'final' }) as BlockInfo;
+            if (logLevel >= 2) console.log(`refresh-block-hash: ${blockInfo?.header?.hash}`);
+            if (blockInfo) {
+                setLastBlockHash(blockInfo.header.hash);
+                last_block_height = blockInfo.header.height;
+            }
         }
-        else {
-            if (logLevel >= 2) console.log(`Using cached access key for ${signerId}: have nonce:${cachedAccessKey.nonce}`);
-        }
-
-        // converts a recent block hash into an array of bytes
-        // this hash was retrieved earlier when creating the accessKey (Line 26)
-        // this is required to prove the tx was recently constructed (within 24hrs)
-        last_block_hash = decodeBase58(cachedAccessKey.block_hash);
-        last_block_height = cachedAccessKey.block_height;
-
-        // each transaction requires a unique number or nonce
-        // this is created by taking the current nonce and incrementing it
-        cachedAccessKey.nonce += 1
-        let nonce = cachedAccessKey.nonce;
-        if (logLevel >= 2) console.log(`nonce++ for ${signerId} = ${nonce}`);
-
         const transaction = TX.createTransaction(
             signerId,
             publicKey,
             receiver,
             nonce,
             actions,
-            last_block_hash
+            decodeBase58(last_block_hash)
         )
 
         const serializedTx = serialize(TX.SCHEMA, transaction);
@@ -325,23 +339,26 @@ export async function broadcast_tx_commit_actions(actions: TX.Action[], signerId
             })
         });
 
-        shouldRetry = false;
+        invalidTxErrorExpired = false;
         try {
             last_tx_result = await broadcast_tx_commit_signed(signedTransaction)
         }
         catch (ex: any) {
-            if (retry < 3 && ex && ex.message && (ex.message as string).includes("InvalidTxError:Expired")) {
+            if (hashTooOldRetries < 2 && ex && ex.message && (ex.message as string).includes("InvalidTxError:Expired")) {
+                // if the last_block_hash is too old, the tx is rejected with InvalidTxError:Expired
+                // in this case, we retry once with a new block hash
+                hashTooOldRetries += 1
                 console.log(ex.message)
-                retry += 1
-                console.log(`RETRY #${retry} in 1 second`)
-                await sleep(1000);
-                shouldRetry = true;
+                console.log(`RETRY #${hashTooOldRetries} in 500ms`)
+                await sleep(500);
+                last_block_hash_timestamp = 0; //force refresh of block_hash
+                invalidTxErrorExpired = true;
             }
             else {
                 throw (ex)
             }
         }
-    } while (shouldRetry);
+    } while (invalidTxErrorExpired);
 
     if (last_tx_result.status && (last_tx_result.status as FinalExecutionStatus).Failure) {
         if (logLevel >= 2) console.error(JSON.stringify(last_tx_result));
@@ -352,12 +369,12 @@ export async function broadcast_tx_commit_actions(actions: TX.Action[], signerId
     if (logLevel >= 1) console.log(getLogsAndErrorsFromReceipts(last_tx_result));
 
     if (last_tx_result.status && (last_tx_result.status as FinalExecutionStatus).SuccessValue === "") { //returned "void"
-        cachedAccessKey.timestamp = Date.now(); // make cache valid for 5 secs more
+        akCachedNonce.timestamp = Date.now(); // make akCachedNonce valid for more time
         return undefined; //void
     }
 
     if (last_tx_result.status && (last_tx_result.status as FinalExecutionStatus).SuccessValue) { //some json result value, can by a string|true/false|a number
-        cachedAccessKey.timestamp = Date.now(); // make cache valid for 5 secs more
+        akCachedNonce.timestamp = Date.now(); // make akCachedNonce valid for more time
         const sv = naclUtil.encodeUTF8(naclUtil.decodeBase64((last_tx_result.status as FinalExecutionStatus).SuccessValue || ""))
         if (logLevel > 0) console.log("result.status.SuccessValue:", sv);
         return JSON.parse(sv)

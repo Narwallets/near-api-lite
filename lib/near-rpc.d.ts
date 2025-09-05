@@ -54,10 +54,12 @@ export declare function viewRaw(contractId: string, method: string, params?: Rec
 export declare function view(contractId: string, method: string, params?: any): Promise<any>;
 export type BlockInfo = {
     header: {
+        hash: string;
         height: number;
         timestamp: number;
         epoch_id: string;
         next_epoch_id: string;
+        gas_price: string;
     };
 };
 export declare function latestBlock(): Promise<BlockInfo>;
