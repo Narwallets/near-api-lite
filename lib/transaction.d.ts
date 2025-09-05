@@ -7,7 +7,7 @@ import { KeyPair } from './utils/key-pair.js';
 export declare class FunctionCallPermission extends Assignable {
     allowance?: BN;
     receiverId: string;
-    methodNames: String[];
+    methodNames: string[];
 }
 export declare class FullAccessPermission extends Assignable {
 }
@@ -20,7 +20,7 @@ export declare class AccessKey extends Assignable {
     permission: AccessKeyPermission;
 }
 export declare function fullAccessKey(): AccessKey;
-export declare function functionCallAccessKey(receiverId: string, methodNames: String[], allowance?: BN): AccessKey;
+export declare function functionCallAccessKey(receiverId: string, methodNames: string[], allowance?: BN): AccessKey;
 export declare class IAction extends Assignable {
 }
 declare class CreateAccount extends IAction {
