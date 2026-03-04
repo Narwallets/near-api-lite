@@ -35,6 +35,11 @@ export declare function setLogLevel(n: number): void;
  * @param onOff true to enable debug logging
  */
 export declare function setDebugMode(onOff: boolean): void;
+/**
+ * sets dry run mode for RPC calls
+ * @param onOff true to enable dry run mode (calls are not sent, only logged)
+ */
+export declare function setDryRunMode(onOff: boolean): void;
 export declare function lastBlockHashSeen(): Uint8Array;
 export declare function lastBlockHeightSeen(): number;
 export declare function bufferToHex(buffer: any): string;

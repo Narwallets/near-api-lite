@@ -68,6 +68,16 @@ export function setDebugMode(onOff: boolean) {
     logLevel = onOff ? 2 : 0;
 }
 
+let dryRunMode = false;
+/**
+ * sets dry run mode for RPC calls
+ * @param onOff true to enable dry run mode (calls are not sent, only logged)
+ */
+export function setDryRunMode(onOff: boolean) {
+    dryRunMode = onOff;
+}
+
+
 
 //--helper fn
 let last_block_hash: string;
@@ -77,7 +87,7 @@ function setLastBlockHash(bh: string) {
     last_block_hash_timestamp = Date.now();
 }
 export function lastBlockHashSeen(): Uint8Array {
-    return decodeBase58(last_block_hash );
+    return decodeBase58(last_block_hash);
 }
 
 let last_block_height: number;
@@ -273,6 +283,11 @@ type AkCachedNonce = {
 let akCachedNonces: Record<string, AkCachedNonce> = {};
 export async function broadcast_tx_commit_actions(actions: TX.Action[], signerId: string, receiver: string, privateKey: string): Promise<any> {
 
+    if (dryRunMode) {
+        console.log(`DRY-RUN: broadcast_tx_commit_actions ${signerId} -> ${receiver}, actions: ${JSON.stringify(actions)}`);
+        return Promise.resolve(undefined);
+    }
+
     const keyPair = KeyPairEd25519.fromString(privateKey);
     const publicKey = keyPair.getPublicKey();
 
@@ -441,7 +456,10 @@ export function call(
     TGas: number,
     attachedYoctos?: string): Promise<any> {
 
-    if (logLevel > 0) console.log(`call ${contractId} ${method} ${params instanceof Uint8Array ? "[Uint8Array]" : JSON.stringify(params)} --accountId ${sender} -gas:${TGas} --amount:${yton(attachedYoctos || "0")}`);
+    if (dryRunMode || logLevel > 0) {
+        console.log(`${dryRunMode ? "DRY-RUN " : ""} near call ${contractId} ${method} ${params instanceof Uint8Array ? "[Uint8Array]" : JSON.stringify(params)} --accountId ${sender} -gas:${TGas} --amount:${yton(attachedYoctos || "0")}`);
+    }
+    if (dryRunMode) return Promise.resolve(undefined);
 
     return broadcast_tx_commit_actions(
         [TX.functionCall(method, params, new BN(TGas.toString() + "0".repeat(12)), new BN(attachedYoctos || "0"))],
